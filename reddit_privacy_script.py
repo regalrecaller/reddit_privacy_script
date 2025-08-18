@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 Reddit Comment Privacy Script
-Edits and optionally deletes comments older than a specified threshold
+- Processes comments from oldest to newest
+- Deletes any comments already edited to replacement text
+- Edits and optionally deletes comments older than a specified threshold
 """
 
 import praw
@@ -15,11 +17,11 @@ def create_reddit_instance():
     # You'll need to create an app at https://www.reddit.com/prefs/apps
     # Select "script" as the app type
     reddit = praw.Reddit(
-        client_id="medh9e6bF1N480-jkfFMaw",        # From your app
-        client_secret="HjDHfLzggSijeF9Uo98_AAJe3J5KNg", # From your app
-        username="cccanterbury",           # Your Reddit username
-        password="Keeping this account secure.",           # Your Reddit password
-        user_agent="Comment Privacy Script by /u/cccanterbury"
+        client_id="YOUR_CLIENT_ID",        # From your app
+        client_secret="YOUR_CLIENT_SECRET", # From your app
+        username="YOUR_USERNAME",           # Your Reddit username
+        password="YOUR_PASSWORD",           # Your Reddit password
+        user_agent="Comment Privacy Script by /u/YOUR_USERNAME"
     )
     
     return reddit
@@ -46,14 +48,29 @@ def process_comments(reddit, edit_text="[deleted]", delete_after_edit=True, dry_
     deleted = 0
     skipped = 0
     failed = 0
+    all_comments = []  # Initialize for exception handling
     
     try:
-        # Iterate through all comments
-        for comment in user.comments.new(limit=None):
+        # Get all comments and reverse to start from oldest
+        print("Fetching all comments...")
+        all_comments = list(user.comments.new(limit=None))
+        all_comments.reverse()  # Now oldest comments are first
+        print(f"Found {len(all_comments)} total comments")
+        
+        # Iterate through all comments (oldest first)
+        for comment in all_comments:
             try:
-                # Skip if already edited to our text
+                # Delete if already edited to our text
                 if comment.body == edit_text:
-                    print(f"Skipping already edited comment: {comment.id}")
+                    print(f"Found already edited comment: {comment.id}")
+                    if not dry_run:
+                        comment.delete()
+                        print("✓ Deleted previously edited comment")
+                        deleted += 1
+                        time.sleep(1)
+                    else:
+                        print("[DRY RUN] Would delete this previously edited comment")
+                    processed += 1
                     continue
                 
                 # Display comment info
@@ -110,11 +127,16 @@ def process_comments(reddit, edit_text="[deleted]", delete_after_edit=True, dry_
     # Final statistics
     print(f"\n{'='*50}")
     print(f"Processing complete!")
-    print(f"Total comments found: {processed + skipped}")
+    if all_comments:
+        print(f"Total comments found: {len(all_comments)}")
+    print(f"Comments processed: {processed}")
     print(f"Comments skipped (too recent): {skipped}")
     if not dry_run:
         print(f"Comments edited: {edited}")
         print(f"Comments deleted: {deleted}")
+        if deleted > edited:
+            print(f"  - Previously edited: {deleted - edited}")
+            print(f"  - Newly processed: {edited}")
     else:
         print(f"Comments that would be processed: {processed}")
     print(f"Failed: {failed}")
@@ -128,9 +150,11 @@ def main():
     
     # Safety confirmation
     print("\nThis script will:")
-    print("1. Leave recent comments (30 days or newer) completely untouched")
-    print("2. Edit older comments to remove content")
-    print("3. Optionally delete the edited older comments")
+    print("1. Process comments from oldest to newest")
+    print("2. Delete any comments already edited to the replacement text")
+    print("3. Leave recent comments (30 days or newer) completely untouched")
+    print("4. Edit older comments to remove content")
+    print("5. Optionally delete the edited older comments")
     print("\nThis action cannot be undone!")
     
     # Get user preferences
